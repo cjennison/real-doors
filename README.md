@@ -62,6 +62,8 @@ Then enable **Real Doors** in your world's *Manage Modules*. Requires the **dnd5
 
 Click **Save**. A locked, managed door is now gated.
 
+![DM door configuration dialog](docs/images/dm-config.png)
+
 > Turn the **Configure Real Door** toggle back off when you're done so normal clicks
 > open/close doors as usual.
 
@@ -69,6 +71,9 @@ Click **Save**. A locked, managed door is now gated.
 
 When a player clicks a locked managed door, you get an approval dialog showing the attempting
 player, their character, the configured check, the trap, and your note. Choose:
+
+![DM approval dialog](docs/images/dm-approval.png)
+
 
 - **Approve** — the player's character rolls the skill vs the DC. Success opens the door;
   failure springs the trap.
