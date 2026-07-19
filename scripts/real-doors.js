@@ -243,7 +243,7 @@ async function handleOpenDecisionAsPlayer(data) {
   const success = total >= cfg.dc;
 
   await roll.toMessage({
-    speaker: ChatMessage.getSpeaker({ actor: pc }),
+    speaker: { actor: pc?.id, alias: pc?.name },
     flavor: `Real Doors — ${skillLabel(cfg.skill)} check (DC ${cfg.dc}) — ${success ? "Success!" : "Failure"}`
   });
 
@@ -261,7 +261,7 @@ async function handleOpenDecisionAsPlayer(data) {
     const dmg = await new Roll(cfg.trapFormula).evaluate();
     damage = dmg.total;
     await dmg.toMessage({
-      speaker: ChatMessage.getSpeaker({ actor: pc }),
+      speaker: { actor: pc?.id, alias: pc?.name },
       flavor: `Real Doors — Trap! ${cfg.trapType !== "none" ? cfg.trapType : ""} damage`
     });
     await applyTrapDamage(pc, dmg.total, cfg.trapType);
