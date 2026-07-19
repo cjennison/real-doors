@@ -92,6 +92,31 @@ player, their character, the configured check, the trap, and your note. Choose:
 - A **failed** roll may trigger a trap that damages your character.
 - **Right-click** a managed door to ask the DM to re-lock it.
 
+## Integrations & hooks
+
+Real Doors broadcasts a Foundry hook on every connected client when something happens, so
+other modules can react (e.g. to narrate the event). Each fires once per client with a
+context payload:
+
+| Hook | Fired when |
+| --- | --- |
+| `real-doors.opened` | A door is opened (skill success, or force-opened by the DM). |
+| `real-doors.failed` | A player fails the check (includes trap details, if any). |
+| `real-doors.relocked` | A door is re-locked. |
+
+```js
+Hooks.on("real-doors.opened", (ctx) => {
+  // ctx: { character, actorId, skill, dc, roll, scene, sceneId, wallId, action, ... }
+});
+```
+
+### Optional: Connection Manager (AI flavor text)
+
+If the [Connection Manager](https://github.com/cjennison/connection-manager) module is active,
+the door config gains an **On event → Connection** dropdown. Pick a connection (e.g. an
+**AI Flavor Text** narrator) and, whenever that door fires an event, the enriched context is
+sent to it — for example posting a short, context-aware line of narration to chat.
+
 ## Compatibility
 
 - Foundry VTT v13+ (verified on v14).
