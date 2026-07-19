@@ -33,7 +33,8 @@ function getDoorConfig(wallDoc) {
     dc: Number(f.dc ?? 10),
     trapFormula: f.trapFormula ?? "",
     trapType: f.trapType ?? "none",
-    note: f.note ?? ""
+    note: f.note ?? "",
+    connectionId: f.connectionId ?? ""
   };
 }
 
@@ -170,6 +171,16 @@ async function handleRelockRequestAsGM(data) {
   if (approved) {
     await wall.update({ ds: CONST.WALL_DOOR_STATES.LOCKED });
     emit({ type: "notify", userId: data.userId, level: "info", message: "The DM allowed you to re-lock the door." });
+    fireEvent("relocked", {
+      kind: "door",
+      character: data.userName,
+      note: getDoorConfig(wall)?.note ?? null,
+      scene: game.scenes.get(data.sceneId)?.name ?? null,
+      sceneId: data.sceneId,
+      wallId: data.wallId,
+      connectionId: getDoorConfig(wall)?.connectionId || null,
+      action: "re-locked and secured the door"
+    });
   } else {
     emit({ type: "notify", userId: data.userId, level: "warn", message: "The DM did not allow you to re-lock the door." });
   }
@@ -197,6 +208,19 @@ async function handleOpenDecisionAsPlayer(data) {
   const cfg = wall ? getDoorConfig(wall) : null;
   const pc = game.actors.get(data.actorId) ?? userCharacter();
 
+  const baseCtx = {
+    kind: "door",
+    character: pc?.name ?? "Someone",
+    actorId: pc?.id ?? data.actorId,
+    skill: cfg?.skill ? skillLabel(cfg.skill) : null,
+    dc: cfg?.dc ?? null,
+    note: cfg?.note ?? null,
+    scene: canvas.scene?.name ?? null,
+    sceneId: data.sceneId,
+    wallId: data.wallId,
+    connectionId: cfg?.connectionId || null
+  };
+
   const setOpen = () => emit({
     type: "set-door",
     sceneId: data.sceneId,
@@ -208,6 +232,7 @@ async function handleOpenDecisionAsPlayer(data) {
   if (data.force || !cfg || !cfg.skill) {
     setOpen();
     ui.notifications.info("The door swings open.");
+    fireEvent("opened", { ...baseCtx, success: true, forced: !!data.force, action: data.force ? "forced open by the DM" : "opened" });
     return;
   }
 
@@ -225,25 +250,61 @@ async function handleOpenDecisionAsPlayer(data) {
   if (success) {
     setOpen();
     ui.notifications.info("Success! The door opens.");
+    fireEvent("opened", { ...baseCtx, success: true, forced: false, roll: total, action: `opened after a successful ${baseCtx.skill} check` });
     return;
   }
 
   // Failure -> spring the trap (if any).
   ui.notifications.warn("You failed to open the door.");
+  let damage = 0;
   if (cfg.trapFormula) {
     const dmg = await new Roll(cfg.trapFormula).evaluate();
+    damage = dmg.total;
     await dmg.toMessage({
       speaker: ChatMessage.getSpeaker({ actor: pc }),
       flavor: `Real Doors — Trap! ${cfg.trapType !== "none" ? cfg.trapType : ""} damage`
     });
     await applyTrapDamage(pc, dmg.total, cfg.trapType);
   }
+  fireEvent("failed", {
+    ...baseCtx,
+    success: false,
+    roll: total,
+    trap: cfg.trapFormula || null,
+    damage: damage || null,
+    damageType: cfg.trapType && cfg.trapType !== "none" ? cfg.trapType : null,
+    action: cfg.trapFormula ? "failed the check and sprang a trap" : "failed to open the door"
+  });
 }
 
 function handleNotify(data) {
   if (data.userId !== game.user.id) return;
   const level = data.level === "warn" ? "warn" : "info";
   ui.notifications[level](data.message);
+}
+
+/* -------------------------------------------- */
+/*  Public hooks                                */
+/* -------------------------------------------- */
+
+/**
+ * Broadcast a semantic Real Doors event as a Foundry hook so that other modules
+ * (e.g. an AI flavor-text module) can react. Fires `realDoors.<name>` on every
+ * connected client exactly once: locally here, and on other clients via socket.
+ * This module itself does nothing with the event — it is purely a notification.
+ *
+ * @param {string} name  Event name, e.g. "opened", "failed", "relocked".
+ * @param {object} ctx   Context payload describing what happened.
+ */
+function fireEvent(name, ctx = {}) {
+  const payload = { module: MODULE_ID, event: name, ...ctx };
+  Hooks.callAll(`${MODULE_ID}.${name}`, payload);
+  emit({ type: "event", name, ctx: payload });
+  // If a Connection Manager connection is selected for this door, run it (the
+  // manager routes execution to the active GM and enriches the context).
+  if (ctx.connectionId) {
+    game.modules.get("connection-manager")?.api?.run?.(ctx.connectionId, payload);
+  }
 }
 
 /* -------------------------------------------- */
@@ -257,6 +318,7 @@ function onSocket(data) {
     case "set-door": return handleSetDoorAsGM(data);
     case "open-decision": return handleOpenDecisionAsPlayer(data);
     case "notify": return handleNotify(data);
+    case "event": return void Hooks.callAll(`${MODULE_ID}.${data.name}`, data.ctx);
   }
 }
 
@@ -267,7 +329,7 @@ function onSocket(data) {
 async function openDoorConfig(wallDoc) {
   if (!game.user.isGM) return;
   const DialogV2 = foundry.applications.api.DialogV2;
-  const cfg = getDoorConfig(wallDoc) ?? { skill: "prc", dc: 12, trapFormula: "", trapType: "none", note: "" };
+  const cfg = getDoorConfig(wallDoc) ?? { skill: "prc", dc: 12, trapFormula: "", trapType: "none", note: "", connectionId: "" };
   const managed = isManaged(wallDoc);
   const locked = wallDoc.ds === CONST.WALL_DOOR_STATES.LOCKED;
 
@@ -283,6 +345,12 @@ async function openDoorConfig(wallDoc) {
       const label = typeof v === "string" ? v : (v.label ?? k);
       return `<option value="${k}" ${k === cfg.trapType ? "selected" : ""}>${label}</option>`;
     }))
+    .join("");
+
+  const connections = game.modules.get("connection-manager")?.api?.getConnections?.() ?? [];
+  const connOptions = ['<option value="">— none —</option>']
+    .concat(connections.map(c =>
+      `<option value="${c.id}" ${c.id === cfg.connectionId ? "selected" : ""}>${c.name} (${c.type})</option>`))
     .join("");
 
   const content = `
@@ -313,6 +381,10 @@ async function openDoorConfig(wallDoc) {
         <label>DM note (shown on approval)</label>
         <input type="text" name="note" value="${cfg.note}" placeholder="e.g. Rusty iron lock, poison needle">
       </div>
+      <div class="form-group">
+        <label>On event → Connection (optional)</label>
+        <select name="connectionId">${connOptions}</select>
+      </div>
     </div>`;
 
   const result = await DialogV2.wait({
@@ -333,7 +405,8 @@ async function openDoorConfig(wallDoc) {
             dc: Number(f.dc.value || 10),
             trapFormula: f.trapFormula.value.trim(),
             trapType: f.trapType.value,
-            note: f.note.value.trim()
+            note: f.note.value.trim(),
+            connectionId: f.connectionId.value
           };
         }
       },
@@ -355,7 +428,8 @@ async function openDoorConfig(wallDoc) {
     dc: result.dc,
     trapFormula: result.trapFormula,
     trapType: result.trapType,
-    note: result.note
+    note: result.note,
+    connectionId: result.connectionId || ""
   });
   await wallDoc.update({
     ds: result.locked ? CONST.WALL_DOOR_STATES.LOCKED : CONST.WALL_DOOR_STATES.CLOSED
