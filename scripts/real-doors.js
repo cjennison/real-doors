@@ -112,7 +112,7 @@ async function handleOpenRequestAsGM(data) {
   if (!isActiveGM()) return;
   const wall = getWall(data.sceneId, data.wallId);
   if (!wall) return;
-  const cfg = getDoorConfig(wall.document) ?? { skill: "", dc: 10, trapFormula: "", trapType: "none", note: "" };
+  const cfg = getDoorConfig(wall) ?? { skill: "", dc: 10, trapFormula: "", trapType: "none", note: "" };
 
   const DialogV2 = foundry.applications.api.DialogV2;
   const details = [
@@ -194,7 +194,7 @@ async function handleOpenDecisionAsPlayer(data) {
   }
 
   const wall = getWall(data.sceneId, data.wallId);
-  const cfg = wall ? getDoorConfig(wall.document) : null;
+  const cfg = wall ? getDoorConfig(wall) : null;
   const pc = game.actors.get(data.actorId) ?? userCharacter();
 
   const setOpen = () => emit({
