@@ -500,8 +500,7 @@ Hooks.on("getSceneControlButtons", (controls) => {
     toggle: true,
     active: configMode,
     order: 99,
-    onChange: (event, active) => { configMode = active ?? !configMode; },
-    onClick: (active) => { configMode = active ?? !configMode; }
+    onChange: (event, active) => { configMode = active ?? !configMode; }
   };
 
   if (Array.isArray(controls)) {
