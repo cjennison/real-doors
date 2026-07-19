@@ -1,0 +1,25 @@
+.real-doors-dialog .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 8px;
+}
+
+.real-doors-dialog .form-group > label {
+  font-weight: bold;
+}
+
+.real-doors-dialog label.rd-force,
+.real-doors-dialog .form-group label input[type="checkbox"] {
+  font-weight: normal;
+}
+
+.real-doors-dialog input[type="text"],
+.real-doors-dialog input[type="number"],
+.real-doors-dialog select {
+  width: 100%;
+}
+
+.real-doors-dialog hr {
+  margin: 8px 0;
+}
